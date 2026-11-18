@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek 网页对话成本 · 计算方法</title>
+<style>
+  :root{
+    --bg:#0b0d11; --surface:#12151b; --surface-2:#181c23;
+    --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.11);
+    --txt:#e9eaee; --sub:#8f96a3; --faint:#585f6d;
+    --cyan:#5eead4; --blue:#60a5fa; --violet:#a78bfa;
+    --green:#4ade80; --amber:#fbbf24; --pink:#f472b6; --red:#f87171;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:var(--bg);color:var(--txt);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:15px;line-height:1.85;
+    padding:72px 32px 100px;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(900px 420px at 50% -8%,rgba(94,234,212,.05),transparent 72%);
+    background-repeat:no-repeat;
+  }
+  .wrap{max-width:820px;margin:0 auto}
+
+  /* 头部 */
+  .eyebrow{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-weight:500}
+  h1{font-size:clamp(28px,3.6vw,40px);font-weight:600;letter-spacing:-.028em;line-height:1.2;margin:18px 0 16px}
+  h1 em{font-style:normal;background:linear-gradient(100deg,#5eead4,#60a5fa 55%,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{font-size:14px;color:var(--sub);line-height:1.85;max-width:700px}
+  .meta{display:flex;gap:28px;margin-top:28px;padding-top:22px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .meta div{font-size:11px;color:var(--faint)}
+  .meta b{display:block;font-size:13px;color:var(--sub);font-weight:500;margin-top:5px}
+
+  /* 摘要卡 */
+  .tldr{
+    margin:44px 0 0;padding:28px 30px;border-radius:16px;
+    background:linear-gradient(135deg,rgba(94,234,212,.05),rgba(96,165,250,.03));
+    border:1px solid rgba(94,234,212,.14);
+  }
+  .tldr h3{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);font-weight:500;margin-bottom:18px}
+  .tldr-row{display:flex;gap:36px;flex-wrap:wrap}
+  .tr{min-width:120px}
+  .tr .n{font-size:24px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .tr .l{font-size:10.5px;color:var(--faint);margin-top:5px}
+
+  /* 章节 */
+  section{margin-top:64px;scroll-margin-top:24px}
+  h2{
+    font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.3;
+    display:flex;align-items:baseline;gap:14px;
+  }
+  h2 .num{
+    font-size:11px;color:var(--cyan);font-weight:600;letter-spacing:.08em;
+    font-variant-numeric:tabular-nums;flex:none;
+  }
+  h3{font-size:15px;font-weight:600;margin:34px 0 12px;letter-spacing:-.01em;color:var(--txt)}
+  h3::before{content:"▹ ";color:var(--faint)}
+  h4{font-size:13px;font-weight:600;margin:22px 0 8px;color:var(--sub)}
+  p{margin:12px 0;color:#c9cdd6}
+  p strong{color:var(--txt);font-weight:600}
+  ul,ol{margin:12px 0 12px 4px;padding-left:20px;color:#c9cdd6}
+  li{margin:8px 0}
+  li::marker{color:var(--faint)}
+
+  /* 公式 */
+  .formula{
+    margin:20px 0;padding:18px 22px;border-radius:12px;
+    background:var(--surface);border:1px solid var(--line);
+    font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+    font-size:13px;line-height:2;color:var(--cyan);overflow-x:auto;
+  }
+  .formula .c{color:var(--faint)}
+
+  /* 表格 */
+  .tbl{margin:20px 0;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:11px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--faint);font-weight:500;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding-bottom:9px}
+  td{color:var(--txt);line-height:1.6}
+  td.n{font-variant-numeric:tabular-nums;text-align:right}
+  tbody tr:hover{background:rgba(255,255,255,.017)}
+  tr:last-child td{border-bottom:none}
+
+  /* 提示块 */
+  .box{margin:20px 0;padding:16px 20px;border-radius:12px;font-size:13px;line-height:1.75}
+  .box.warn{background:rgba(251,191,36,.05);border-left:2px solid var(--amber);color:#d8c9a8}
+  .box.info{background:rgba(94,234,212,.04);border-left:2px solid var(--cyan);color:#a8c4c0}
+  .box.danger{background:rgba(248,113,113,.05);border-left:2px solid var(--red);color:#d8b0b0}
+  .box b{color:var(--txt)}
+
+  code{
+    font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;
+    background:rgba(94,234,212,.07);color:var(--cyan);
+    padding:1.5px 5px;border-radius:4px;
+  }
+
+  /* 目录 */
+  .toc{margin:36px 0 0;padding:22px 26px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+  .toc .t{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:14px}
+  .toc ol{list-style:none;padding:0;margin:0;counter-reset:t}
+  .toc li{margin:7px 0;counter-increment:t}
+  .toc a{color:var(--sub);text-decoration:none;font-size:13px;display:flex;gap:12px;transition:color .15s}
+  .toc a:hover{color:var(--cyan)}
+  .toc a::before{content:counter(t,decimal-leading-zero);color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums}
+
+  hr{border:none;border-top:1px solid var(--line);margin:56px 0 0}
+  footer{margin-top:44px;padding-top:24px;border-top:1px solid var(--line);color:var(--faint);font-size:11px;line-height:1.8}
+
+  @media(max-width:680px){
+    body{padding:40px 18px 60px;font-size:14px}
+    .meta{gap:18px}
+    .tldr-row{gap:22px}
+    h2{font-size:19px;gap:10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">Methodology · Cost Model</div>
+  <h1>如何计算<em> DeepSeek 网页对话</em>的真实成本</h1>
+  <div class="lede">
+    本文完整记录一套从「导出包」反推 API 等价成本的方法：每个数字的字段来源、每条公式的推导依据、每个假设的边界与误差。所有结论均可按文末脚本复现。
+  </div>
+
+  <div class="meta">
+    <div>数据范围<b>2025-01 → 2026-11（22 个月）</b></div>
+    <div>样本规模<b>1,415 会话 / 10,745 消息 / 5,440 轮</b></div>
+    <div>计价基准<b>API 等价成本（非账单）</b></div>
+  </div>
+
+  <div class="tldr">
+    <h3>结论摘要</h3>
+    <div class="tldr-row">
+      <div class="tr"><div class="n" style="color:var(--cyan)">¥160.95</div><div class="l">基准（当时真实价格）</div></div>
+      <div class="tr"><div class="n" style="color:var(--violet)">¥175.24</div><div class="l">V4 期 Pro/Flash 各半</div></div>
+      <div class="tr"><div class="n" style="color:var(--green)">¥153.42</div><div class="l">全程 V4.1-Flash 价</div></div>
+      <div class="tr"><div class="n" style="color:var(--amber)">59%</div><div class="l">搜索费占比</div></div>
+    </div>
+  </div>
+
+  <div class="toc">
+    <div class="t">目录</div>
+    <ol>
+      <li><a href="#s1">数据源与字段语义</a></li>
+      <li><a href="#s2">输入 token：最容易算错的一环</a></li>
+      <li><a href="#s3">输出 token：按字符折算</a></li>
+      <li><a href="#s4">联网费：按查询词与页面计</a></li>
+      <li><a href="#s5">分时期定价：价格、缓存、分流</a></li>
+      <li><a href="#s6">成本结构与反直觉结论</a></li>
+      <li><a href="#s7">未确定项与误差边界</a></li>
+      <li><a href="#s8">复现清单</a></li>
+    </ol>
+  </div>
+
+  <!-- ============ 1 ============ -->
+  <section id="s1">
+    <h2><span class="num">01</span>数据源与字段语义</h2>
+
+    <p>数据来自 DeepSeek 网页版「导出全部对话」生成的 ZIP，解压后为 <code>chat_sessions/*.json</code>，每个文件一个会话。关键字段只有六个，但每个的语义都需要实测确认——这是整个计算中最容易出错的地方。</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>字段</th><th>路径</th><th>实测语义</th></tr></thead>
+        <tbody>
+          <tr><td><code>accumulated_token_usage</code></td><td>message 级</td><td><b>该轮次的输入上下文大小</b>，不含本轮输出</td></tr>
+          <tr><td><code>fragments[].type</code></td><td>RESPONSE / THINK / REQUEST / TOOL_* / FILE</td><td>区分回答、思维链、用户输入、工具调用、附件</td></tr>
+          <tr><td><code>fragments[].stage_id</code></td><td>fragment 级</td><td><b>处理阶段序号</b>，一个阶段约等于一次 API 请求</td></tr>
+          <tr><td><code>files[].token_usage</code></td><td>附件级</td><td>文档<b>全文</b> token（非实际读入量）</td></tr>
+          <tr><td><code>PARTIAL_FILE_READ.ratio</code></td><td>文档级</td><td>网页端<b>读取了文件前 X%</b> 的比例</td></tr>
+          <tr><td><code>inserted_at</code></td><td>message 级</td><td>UTC 时间戳，用于峰谷/夜间优惠判断</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>为什么必须先确认 <code>accumulated</code> 的语义</h3>
+    <p>若它表示「会话累计消耗」，直接求和即可；若表示「当前上下文」，则需要乘以请求次数。三条实测证据指向后者：</p>
+
+    <ol>
+      <li><b>输出字数不同但 accum 相同</b>：某会话 3 次重试全部成功（回答 117 / 118 / 120 字），三条 <code>accum</code> 却都是 91。若含输出，值应随字数变化。</li>
+      <li><b>存在 accum 小于本轮输出</b>：全库 484 轮（9.2%）出现这一现象，最极端一例 <code>accum=50,944</code> 而输出 87,822 token。输入不可能小于输出。</li>
+      <li><b>会因搜索退出而下降</b>：某轮带 3 组搜索时 accum=21,810，下一轮无搜索骤降至 4,933。符合「搜索结果不进后续上下文」的官方规则。</li>
+    </ol>
+
+    <div class="box info">
+      <b>结论</b>：<code>accumulated_token_usage</code> 是「该轮结束时的上下文快照」，是<b>输入</b>而非累计消耗，且<b>不含本轮输出</b>。
+    </div>
+  </section>
+
+  <!-- ============ 2 ============ -->
+  <section id="s2">
+    <h2><span class="num">02</span>输入 token：最容易算错的一环</h2>
+
+    <h3>朴素做法与它的漏洞</h3>
+    <p>直觉上，总输入 = 所有轮次 <code>accum</code> 之和。对这份数据，得到 <b>9,251 万</b>。</p>
+    <p>但这忽略了一个结构性事实：<b>一轮对话往往对应多次 API 请求</b>。当模型调用工具（搜索、抓取）后，工具结果要回传，模型必须<b>重发完整上下文</b>才能继续生成。所以一带工具的轮次，实际是 2~3 次请求，每次都要付输入费。</p>
+
+    <div class="formula">
+      总输入 = Σ<sub>轮次</sub> ( accum × nreq )
+      <br><span class="c">其中 nreq = max(1, stage_id 最大值)，表示该轮实际请求次数</span>
+    </div>
+
+    <h3>请求次数怎么定</h3>
+    <p>导出包没有直接的请求计数，只能用 <code>stage_id</code> 推断。全库统计：</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>每轮请求数</th><th class="n">轮次数</th><th class="n">占比</th></tr></thead>
+        <tbody>
+          <tr><td>1 次（纯对话，无工具）</td><td class="n">2,892</td><td class="n">53.2%</td></tr>
+          <tr><td>2 次</td><td class="n">1,631</td><td class="n">30.0%</td></tr>
+          <tr><td>3 次</td><td class="n">828</td><td class="n">15.2%</td></tr>
+          <tr><td>4 次以上</td><td class="n">89</td><td class="n">1.6%</td></tr>
+          <tr><td><b>合计</b></td><td class="n"><b>9,046 次请求 / 5,440 轮</b></td><td class="n"><b>1.66 次/轮</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>因为工具可以并行批量调用（官方文档：「模型一次调用多个工具时，先下发全部调用块，再下发结果块」），所以 6 个工具的轮次 <code>stage</code> 最大仍可能只有 2 —— 不能用「工具数 + 1」估算，会高估到 4.46 次/轮。</p>
+
+    <h3>三种口径的取值</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>口径</th><th class="n">总输入</th><th class="n">相对</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>每轮 1 次</td><td class="n">9,251 万</td><td class="n">1.00×</td><td>低估，等于假设工具调用免费</td></tr>
+          <tr><td style="color:var(--cyan)"><b>线性插值（采用）</b></td><td class="n" style="color:var(--cyan)"><b>11,252 万</b></td><td class="n" style="color:var(--cyan)"><b>1.22×</b></td><td>第 k 次请求上下文 ≈ 上轮 accum → 本轮 accum 的线性插值</td></tr>
+          <tr><td>accum × 请求数</td><td class="n">11,763 万</td><td class="n">1.30×</td><td>上界，假设每次请求都用最大上下文</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box warn">
+      <b>这一层的误差</b>：<code>stage_id</code> 是否真等于请求次数，无法从数据反证。若实际请求数更多（如每次工具单独一次往返），输入会进一步上升；若更少（如服务端合并多轮工具），则接近 9,251 万。当前取中性值 11,252 万。
+    </div>
+  </section>
+
+  <!-- ============ 3 ============ -->
+  <section id="s3">
+    <h2><span class="num">03</span>输出 token：按字符折算</h2>
+
+    <p>导出包<b>没有</b> per-message 的 <code>output_tokens</code>，只能用字符数折算：</p>
+
+    <div class="formula">
+      输出 token = Σ ( len(RESPONSE) + len(THINK) ) × k
+      <br><span class="c">k = 0.362 token/字符（≈ 2.76 字符/token）</span>
+    </div>
+
+    <h3>为什么思维链算输出</h3>
+    <p>官方 <code>usage.output_tokens_details.thinking_tokens</code> 明确把思考 token 归入输出。这份数据里思维链占输出字符的 <b>33%</b>（697 万 / 2,107 万），不能忽略。</p>
+
+    <h3>k 值的校验</h3>
+    <p>官方换算比例为「1 中文字符 ≈ 0.6 token，1 英文字符 ≈ 0.3 token」。实测本文本构成：</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>字符类型</th><th class="n">占比</th><th class="n">官方系数</th></tr></thead>
+        <tbody>
+          <tr><td>中文</td><td class="n">36.3%</td><td class="n">0.6</td></tr>
+          <tr><td>英文</td><td class="n">28.1%</td><td class="n">0.3</td></tr>
+          <tr><td>数字</td><td class="n">2.9%</td><td class="n">0.3</td></tr>
+          <tr><td>标点符号</td><td class="n">16.8%</td><td class="n">~0.4</td></tr>
+          <tr><td>空白</td><td class="n">15.9%</td><td class="n">并入相邻</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>按官方系数加权得 <b>k = 0.3783</b>，与实测 0.362 相差 <b>4.5%</b>。另一条独立验证：用 <code>accum</code> 增量反算输出（<code>delta ≈ 上轮输出 + 本轮用户输入</code>），得到 752 万，与字符法 762.7 万相差 <b>1.4%</b>。</p>
+
+    <div class="box info">
+      <b>结论</b>：k = 0.362 可靠，误差约 ±5%。总输出 <b>762.7 万 token</b>。
+    </div>
+  </section>
+
+  <!-- ============ 4 ============ -->
+  <section id="s4">
+    <h2><span class="num">04</span>联网费：按查询词与页面计</h2>
+
+    <p>联网按<b>查询词条数</b>计费，而非「调用次数」——这是最容易被算错的一处。一次搜索调用可以批量发多个查询词，每个词各计一次。</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>项目</th><th class="n">原始量</th><th>计费单位</th><th class="n">计费量</th><th class="n">费用</th></tr></thead>
+        <tbody>
+          <tr><td>网页搜索</td><td class="n">4,389 次调用</td><td><b>查询词条数</b></td><td class="n">18,566 词</td><td class="n" style="color:var(--amber)">¥92.83</td></tr>
+          <tr><td>网页抓取</td><td class="n">10,840 次调用</td><td><b>真实抓取页面</b></td><td class="n">118 个</td><td class="n" style="color:var(--violet)">¥0.59</td></tr>
+          <tr><td>页内查找</td><td class="n">68 次</td><td><b>不计费</b></td><td class="n">0</td><td class="n">¥0</td></tr>
+          <tr><td style="color:var(--amber)"><b>合计</b></td><td class="n">—</td><td>¥5 / 1,000 次</td><td class="n">18,706</td><td class="n" style="color:var(--amber)"><b>¥93.42</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>官方规则（《联网工具·用量与计费》）</h3>
+    <ul>
+      <li><b>搜索</b>：一次调用返回结果时，按 <code>input.queries</code> 内的查询词条数计费（3 个词 = 3 次）；失败或无结果不计费。</li>
+      <li><b>抓取（深度思考搜索）</b>：仅<b>实际从网络抓取</b>时计费。<b>再次打开同一网页、翻页、打开已随搜索结果返回的网页均不计费</b>。</li>
+      <li><b>页内查找</b>：不计费。</li>
+      <li><code>usage.server_tool_use</code> 里的 <code>tool_search</code>/<code>tool_fetch</code> 才是计费次数；<code>web_search_requests</code> 仅供展示。</li>
+    </ul>
+
+    <div class="box warn">
+      <b>计费口径</b>：搜索按<b>查询词</b>（内置工具口径）；抓取按<b>真实抓取页面</b>——98.8% 的 open_page URL 来自本会话搜索结果（服务端缓存命中，不计费），仅 118 个模型自构造 URL 计费。<b>为什么抓取这么便宜</b>：搜索 ¥5/千次是「检索 + 抓取 N 个页面 + 生成摘要」的打包价（本数据平均每次返回 26.69 条），页面内容在搜索阶段已抓过；open_page 只是「深入看某个已抓过的页面」，再收一次就是重复计费。
+    </div>
+  </section>
+
+  <!-- ============ 5 ============ -->
+  <section id="s5">
+    <h2><span class="num">05</span>分时期定价：价格、缓存、分流</h2>
+
+    <p>22 个月里模型换了 12 次底座、价格调了 10 次。必须逐条按当时价格算，不能用现价一刀切。</p>
+
+    <h3>5.1 模型价格时间线（元 / 百万 token）</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>生效日</th><th class="n">缓存命中</th><th class="n">未命中</th><th class="n">输出</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>2024-12-26</td><td class="n">0.1</td><td class="n">1</td><td class="n">2</td><td>V3 优惠期</td></tr>
+          <tr><td>2025-02-09</td><td class="n">0.5</td><td class="n">2</td><td class="n">8</td><td>V3 恢复原价；<b style="color:var(--violet)">R1 为 1/4/16</b></td></tr>
+          <tr><td>2025-02-26</td><td class="n">0.25</td><td class="n">1</td><td class="n">4</td><td>夜间优惠 00:30–08:30</td></tr>
+          <tr><td>2025-09-06</td><td class="n">0.5</td><td class="n">4</td><td class="n">12</td><td>V3.1 统一价（双模式同价）</td></tr>
+          <tr><td>2025-09-29</td><td class="n">0.2</td><td class="n">2</td><td class="n">3</td><td>V3.2 大降价（输出降 75%）</td></tr>
+          <tr><td>2026-04-24</td><td class="n">0.2</td><td class="n">1</td><td class="n">2</td><td>V4 Flash 首发（Pro 为 1/12/24）</td></tr>
+          <tr><td>2026-04-26</td><td class="n">0.02</td><td class="n">1</td><td class="n">2</td><td>缓存价降至 1/10</td></tr>
+          <tr><td>2026-08-17</td><td class="n" style="color:var(--red)">0.05 / 0.10</td><td class="n" style="color:var(--red)">1.5 / 3</td><td class="n" style="color:var(--red)">4.5 / 9</td><td style="color:var(--red)">首次引入峰谷（空闲/高峰）</td></tr>
+          <tr><td>2026-09-10</td><td class="n" style="color:var(--green)">0.02 / 0.04</td><td class="n" style="color:var(--green)">1 / 2</td><td class="n" style="color:var(--green)">4 / 8</td><td style="color:var(--green)">Flash 回调降价</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>峰谷规则</b>：周一至周五（不含法定节假日）09:00–12:00、14:00–18:00 为高峰，其余含周末全天空闲。空闲价 = 高峰价的一半。实测本账号 <b>77% 的消息落在空闲时段</b>。</p>
+
+    <h3>5.2 缓存命中率取值</h3>
+    <p>这是影响最大的单一变量。常见错误是直接用「全平台 96%」——那是含大量 Agent 长前缀的口径，App 聊天不适用。</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>时期</th><th>底座</th><th class="n">取值</th><th>性质</th></tr></thead>
+        <tbody>
+          <tr><td>2025-01-10~03-24</td><td>V3 + R1</td><td class="n">56%</td><td style="color:var(--green)">官方实测 56.3% 取整</td></tr>
+          <tr><td>2025-03-24~08-21</td><td>V3-0324 / R1-0528</td><td class="n">57%</td><td style="color:var(--amber)">推断</td></tr>
+          <tr><td>2025-08-21~2026-04-24</td><td>V3.1 / V3.2</td><td class="n">58%</td><td style="color:var(--amber)">推断</td></tr>
+          <tr><td>2026-04-24~09-10</td><td>V4-Pro / Flash</td><td class="n" style="color:var(--cyan)">78%</td><td style="color:var(--amber)">推断（跃升段）</td></tr>
+          <tr><td>2026-09-10 起</td><td>V4.1-Flash</td><td class="n" style="color:var(--cyan)"><b>88%</b></td><td style="color:var(--amber)">推断（封顶值）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>推断依据：每 token KV 大小链条</h4>
+    <p>缓存池能同时养住多少条历史前缀 ≈ 容量 ÷（前缀长度 × 每 token KV 字节数）。KV 越小，命中率越高。</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>版本</th><th class="n">每 token KV</th><th>关键变化</th></tr></thead>
+        <tbody>
+          <tr><td>V1</td><td class="n">389,120 B</td><td>基线</td></tr>
+          <tr><td>V3</td><td class="n">70,272 B</td><td>MLA（生产落盘约 39 KB）</td></tr>
+          <tr><td>V3.1</td><td class="n">同 V3</td><td>FP8 只改权重精度，不动落盘 KV</td></tr>
+          <tr><td>V3.2</td><td class="n" style="color:var(--red)">48,068 B</td><td style="color:var(--red)">DSA 索引器额外 128 维 key，<b>反而变大</b></td></tr>
+          <tr><td>V4-Flash</td><td class="n" style="color:var(--cyan)">3,514 B</td><td style="color:var(--cyan)">CSA 4:1 + HCA 128:1，压缩约 11×</td></tr>
+          <tr><td>V4.1-Flash</td><td class="n" style="color:var(--green)">890 B</td><td style="color:var(--green)">CED + CSA2 + FP4 + SWA，累计 437×</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><b>唯一硬锚点</b>：2025-03-01 官方《V3/R1 推理系统概览》披露 2025-02-27 12:00 至 02-28 12:00 的 24 小时统计——三端共 608B 输入 token，其中 342B 命中磁盘 KV 缓存，即 <b>56.3%</b>。当时 App 刚上架、Agent 流量未成形，可近似聊天基线。</p>
+
+    <p><b>为何 2025 全年不跃升</b>：KV 没变小（V3.2 反而增大），缓存 TTL 仍为「尽力而为、几小时到几天」，只能贴着 56% 微升。</p>
+
+    <p><b>为何停在 88% 而非 96%</b>：官方称聊天缓存 TTL 从 7 天缩到 3 天，整体命中率只掉 0.5–1 个百分点——说明回访长尾基本落在 3 天内，继续扩容已近饱和。且 App 侧前缀本身不稳（思考强度写入 system prompt、模式切换、会话重置都会让第 0 个 token 起失效）。</p>
+
+    <h3>5.3 R1 / V3 分流</h3>
+    <p>2025-01-20 至 09-05 期间，App 同时存在 V3（非思考）与 R1（思考），<b>R1 单价是 V3 的 2 倍</b>。数据可区分：<b>消息内含 <code>THINK</code> 片段即为思考轮次</b>。</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>期间</th><th class="n">思考轮次 / 输入</th><th class="n">非思考轮次 / 输入</th></tr></thead>
+        <tbody>
+          <tr><td>2025-01-20~02-08</td><td class="n">26 / 13.5 万</td><td class="n">37 / 9.6 万</td></tr>
+          <tr><td>2025-02-09~08-20</td><td class="n">171 / 53.5 万</td><td class="n">329 / 96.3 万</td></tr>
+          <tr><td>2025-08-21~09-05</td><td class="n">7 / 1.8 万</td><td class="n">2 / 0.7 万</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>拆开后出现一个反直觉结果：<b>R1 思考只用了 53.5 万输入，却花了 ¥4.77；V3 非思考用了 96.3 万，只花 ¥2.20</b>。因为 R1 的输出单价是 16 元/百万，而思考内容本身也算输出。</p>
+  </section>
+
+  <!-- ============ 6 ============ -->
+  <section id="s6">
+    <h2><span class="num">06</span>成本结构与反直觉结论</h2>
+
+    <h3>6.1 三项成本</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>项目</th><th class="n">用量</th><th class="n">费用</th><th class="n">占比</th></tr></thead>
+        <tbody>
+          <tr><td>模型 · 输入</td><td class="n">11,252 万 tok</td><td class="n" style="color:var(--cyan)">¥30.00</td><td class="n">14.6%</td></tr>
+          <tr><td>模型 · 输出</td><td class="n">763 万 tok</td><td class="n" style="color:var(--cyan)">¥35.60</td><td class="n">17.3%</td></tr>
+          <tr><td>网页搜索</td><td class="n">18,566 查询词</td><td class="n" style="color:var(--amber)">¥92.83</td><td class="n" style="color:var(--amber)"><b>45.2%</b></td></tr>
+          <tr><td>网页抓取</td><td class="n">118 页（真实抓取）</td><td class="n" style="color:var(--violet)">¥0.59</td><td class="n">0.4%</td></tr>
+          <tr><td style="color:var(--faint)">工具调用指令（漏算，未计入）</td><td class="n" style="color:var(--faint)">44 万 tok</td><td class="n" style="color:var(--faint)">≈¥2</td><td class="n" style="color:var(--faint)">~1%</td></tr>
+          <tr><td style="color:var(--pink)"><b>合计</b></td><td class="n">—</td><td class="n" style="color:var(--pink)"><b>¥160.95</b></td><td class="n"><b>100%</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6.2 三个反直觉结论</h3>
+
+    <h4>① 输出只占 7.6% 的 token，却占 17% 的费用</h4>
+    <p>输入 11,252 万 token 对输出 763 万，比例 15:1；但费用比是 30:35.6。因为输入单价被缓存打到 0.02–0.5，输出是 2–16，差 6–60 倍。</p>
+
+    <h4>② 联网比模型本身贵 2.2 倍</h4>
+    <p>联网 ¥93.42 vs 模型 ¥67.53。搜索一项占总价 58%。原因是按<b>查询词</b>计费——4,389 次调用平均每次发 4.24 个词；抓取几乎免费（缓存命中）。</p>
+
+    <h4>③ 全程用新模型反而更便宜</h4>
+    <p>若全部 5,440 轮都按 V4.1-Flash 现价（0.02–0.04 / 1–2 / 4–8）+ 88% 缓存，总价 <b>¥153.42</b>，比按当时真实价格的 ¥160.95 <b>还低 5%</b>。因为 2025 年 V3 的输入价 0.5 是今天的 25 倍。</p>
+
+    <h3>6.3 成本集中在极少数会话</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>会话</th><th class="n">输入合计</th><th class="n">峰值/轮</th><th class="n">月份</th></tr></thead>
+        <tbody>
+          <tr><td>考研英语数据结构分析</td><td class="n" style="color:var(--red)">1,881 万</td><td class="n">70.9 万</td><td class="n">2026-09</td></tr>
+          <tr><td>考研英语历年试卷分析</td><td class="n" style="color:var(--red)">1,004 万</td><td class="n">52.1 万</td><td class="n">2026-10</td></tr>
+          <tr><td>考研英语词频项目理解</td><td class="n">449 万</td><td class="n">90.4 万</td><td class="n">2026-09</td></tr>
+          <tr><td>网游小说设定总结</td><td class="n">359 万</td><td class="n">90.0 万</td><td class="n">2026-02</td></tr>
+          <tr><td style="color:var(--amber)"><b>前 4 个占全库</b></td><td class="n" style="color:var(--amber)"><b>40%</b></td><td class="n">—</td><td class="n">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>机制是<b>文档每轮重送</b>：文档首次读入只占输入 10%，但因上下文一直保留，累计贡献 48%。50 个文件、70 万 token 的会话，问 30 轮就是 2,100 万输入。</p>
+
+    <h3>6.4 自审发现的修正项（审计于 2026-11-18）</h3>
+
+    <div class="box danger">
+      <b>漏算：工具调用指令未计入输出</b>——模型生成查询词、选择 URL 的参数也是输出。实测 122 万字符 ≈ 44.2 万 token，占已算输出的 <b>5.8%</b>，约 ¥2。修正后输出为 <b>807 万 token</b>（原 763 万），总价约 +1%。
+    </div>
+
+    <div class="box warn">
+      <b>已解决：open_page 的计费口径（2026-11-18 二次核查）</b>——官方文档说明「深度思考搜索里打开的网页，只给 URL、标题和发布时间，<b>data 为空字符串</b>，页内正文要靠页内查找（find_in_page）去取」，而 find_in_page 完全不计费。工程逻辑链：搜索时服务端已抓取网页生成 summary（<b>缓存已存在</b>）→ open_page 从搜索结果选 URL = <b>缓存命中，不从网络抓取，不计费</b>。实测 10,840 次 open_page 中 <b>98.8% 的 URL 来自本会话搜索结果</b>（不计费），仅 131 次是模型自构造 URL（github/arxiv 等，真实抓取，计费 ¥0.59）。<br>
+      <b>修正前后对比</b>：抓取费 ¥47.19 → <b>¥0.59</b>；联网费 ¥140.13 → <b>¥93.42</b>；总价 ¥205.74 → <b>¥160.95</b>（-23%）。<br><b>强力旁证（内容长度）</b>：open_page 返回的 snippet <b>中位仅 125 字符</b>（搜索结果 192 字符），分布 64% 在 1–299 字、<b>0 条超过 5,000 字</b>。若真抓全文，不可能只有 125 字。另有 3,509 次 open_page 无 url（失败调用），不计费。<br><b>最坏情况</b>：若假设 10,709 次缓存命中全部改为真实抓取，抓取费升至 ¥53.5，总价约 ¥214——但这与「snippet 仅 125 字」的事实矛盾。
+    </div>
+
+    <div class="box info">
+      <b>澄清：不存在"更便宜的计费口径"（2026-11-18 三次核查）</b>——内置工具 <code>deepseek_web_search</code> 的 <code>input.queries</code> 是<b>数组</b>，一次调用可带多个查询词（本数据集平均 <b>4.24 词/次</b>），按词计费。独立 Search API 的 <code>query</code> 是<b>单个字符串</b>（1–128 字符），复刻同样效果需发 18,566 次请求，<b>费用完全相同（¥92.83）</b>。<br>
+      此前误算的「按调用次数 ¥21.55」是把 4,310 次调用当成 4,310 次计费，等于假设每次只查 1 个词——与实际 4.24 词/次不符，<b>该口径不存在，已删除</b>。
+    </div>
+
+    <div class="box info">
+      <b>已验证无误的项</b>：¥5/千次单价（官方双语 ¥5 = $0.75）；失败搜索不计费（实测仅 22 个查询词）；TIMEOUT 不扣 token（accum 不变）；k=0.362（双重验证）；按 THINK 分流 R1/V3。近似项：线性插值在 5+ 工具的轮次偏差可达 30%+（上下文非线性增长）；同轮内第 2+ 次请求的缓存命中率应高于时期均值（当前保守统一取值）。
+    </div>
+  </section>
+
+  <!-- ============ 7 ============ -->
+  <section id="s7">
+    <h2><span class="num">07</span>未确定项与误差边界</h2>
+
+    <h3>7.1 无数据可解（导出包根本没存）</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>未知项</th><th>影响</th><th>为什么无解</th></tr></thead>
+        <tbody>
+          <tr><td>实际模型（Pro / Flash）</td><td style="color:var(--red)">3×</td><td>无 <code>model</code> 字段，thinking 开关分不出</td></tr>
+          <tr><td>每请求 usage 明细</td><td style="color:var(--red)">大</td><td>只有会话级 <code>accum</code>，无 <code>input_tokens</code>/<code>cache_read</code></td></tr>
+          <tr><td>缓存命中率</td><td style="color:var(--red)">10–20×</td><td>只能按时期推断，±5–10 个百分点</td></tr>
+          <tr><td>文档页数</td><td style="color:var(--amber)">中</td><td>只有 <code>file_size</code>，OCR 按页计费（137 个文件需解析）</td></tr>
+          <tr><td>文档解析方式</td><td style="color:var(--amber)">中</td><td><code>text_recognition</code> vs <code>rich_layout</code> 无记录</td></tr>
+          <tr><td>工具 summary 原文</td><td style="color:var(--amber)">中</td><td>只存 <code>snippet</code>（展示用），模型读的 <code>summary</code> 未导出</td></tr>
+          <tr><td>失败重试次数</td><td style="color:var(--green)">小</td><td>失败请求不落盘；实测 TIMEOUT 的 accum 不变，不扣 token</td></tr>
+          <tr><td>思考强度 effort</td><td style="color:var(--green)">小</td><td>无 low/high/max 标记</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>7.2 网页端内部行为（官方未公开）</h3>
+    <ul>
+      <li><b>文档截断规则</b>：UI 提示「超出字数限制，只阅读了前 X%」，X 与 <code>PARTIAL_FILE_READ.ratio</code> 一一吻合（14/26/47/87%）。但四个大文档的 ratio 差异巨大，实际读入 token 却都收敛在 89~91 万——说明存在<b>固定字符读取上限</b>（约 90~100 万字符）。<b>但 ratio × token_usage 与实际读入对不上</b>（网游小说 172.5 万 × 14% = 24.2 万，实际 89.3 万），这个矛盾未解，读入量仍以 <code>accum</code> 增量为准。</li>
+      <li><b>工具投喂 top-N</b>：官方注明 <code>snippet</code> 是「for display in UI」、<code>summary</code> 是「intended to be read by a model」。模型实际读到几条 summary 未知，工具结果 token 误差可能达 ±1 倍。</li>
+      <li><b>网页端是否完全遵循 API 多轮规则</b>：本报告假设一致（搜索结果/思考不进后续轮次），未证实。</li>
+      <li><b>网页端上下文窗口</b>：峰值实测 96.1 万，推测 100 万，未确认。</li>
+    </ul>
+
+    <h3>7.3 假设带来的误差</h3>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>假设</th><th class="n">误差范围</th><th>敏感性</th></tr></thead>
+        <tbody>
+          <tr><td>请求次数 = <code>stage_id</code> 最大值</td><td class="n">±20%</td><td>输入量在 9,251 万 ~ 11,763 万之间浮动</td></tr>
+          <tr><td>字符系数 k = 0.362</td><td class="n">±5%</td><td>官方比例加权为 0.3783，输出量差 4.5%</td></tr>
+          <tr><td>缓存命中率 56→88%</td><td class="n">±5~10 pp</td><td><b>每降 10 个百分点，输入费涨约 30–50%</b></td></tr>
+          <tr><td>文档重送（每轮完整保留）</td><td class="n">±30%</td><td>若网页端对长文档做压缩，会显著降低</td></tr>
+          <tr><td>V4 期全按 Flash</td><td class="n">+7%（若各半）</td><td>¥160.95 → ¥175.24</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box danger">
+      <b>最大不确定性来自缓存命中率</b>。它既影响输入单价（命中 0.02 vs 未命中 1–2，差 50–100 倍），又无法从数据验证。本报告按分时期取值 56→88%，若真实值更低（如 2025 年只有 45%），总价会上浮 20% 以上。
+    </div>
+
+    <h3>7.4 已知的数据异常</h3>
+    <ul>
+      <li><b>图片 token 超上限</b>：239 张中 238 张 ≤1024（官方上限），仅 1 张为 2,530（2025-12 旧记录，无宽高数据），疑为旧规则或拼接图。</li>
+      <li><b>accum 回退 213 次</b>：合计 27.96 万，主因是<b>搜索结果退出上下文</b>导致上下文缩水，非分支。仅 73 个会话（5.2%）的 <code>parent_id</code> 不线性，是重试/重新生成痕迹（165 个分支点，其中 112 个是超时空消息，不产生消耗）。</li>
+      <li><b>文档 token / 文件大小比例异常</b>：md 0.279、json 0.266、pdf 0.0032、pptx 0.0004、xlsx 3.2（token/byte）。说明 <code>token_usage</code> 是<b>解析后文本 token</b>，与文件体积无关——xlsx 压缩率高、pdf 含大量图片。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 8 ============ -->
+  <section id="s8">
+    <h2><span class="num">08</span>复现清单</h2>
+
+    <p>全部计算由以下脚本完成，按顺序执行即可复现：</p>
+
+    <div class="tbl">
+      <table>
+        <thead><tr><th>脚本</th><th>作用</th><th>产出</th></tr></thead>
+        <tbody>
+          <tr><td><code>parse_sessions.py</code></td><td>解析导出包，输出基础统计</td><td><code>deepseek_stats.json</code></td></tr>
+          <tr><td><code>audit_requests.py</code></td><td>统计 stage / 工具调用，估算请求次数</td><td>9,046 次请求</td></tr>
+          <tr><td><code>audit_think_split.py</code></td><td>按 THINK 片段分流 R1 / V3</td><td>197 轮思考</td></tr>
+          <tr><td><code>calc_v5_all.py</code></td><td>三方案分时段计价（含多次请求修正）</td><td>¥160.95 / ¥175.24 / ¥153.42</td></tr>
+          <tr><td><code>audit_inout_cost.py</code></td><td>拆分输入费 / 输出费</td><td>输入 30.00 / 输出 35.60</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>核心代码片段</h3>
+    <div class="formula">
+<span class="c"># 1) 每轮实际输入（线性插值）</span><br>
+nreq = max(1, max(stage_ids))<br>
+eff_in = (prev_accum + accum) / 2 * nreq<br><br>
+<span class="c"># 2) 输出</span><br>
+out_tok = (len(RESPONSE) + len(THINK)) * 0.362<br><br>
+<span class="c"># 3) 单轮费用</span><br>
+cost = eff_in/1e6 * (hit*price_hit + (1-hit)*price_miss) \<br>
+&nbsp;&nbsp;&nbsp;&nbsp; + out_tok/1e6 * price_out
+    </div>
+
+    <h3>一句话总结</h3>
+    <p>这套方法的核心是三步：<b>先确认字段语义</b>（accum 是上下文不是累计）、<b>再补上被隐藏的请求次数</b>（工具调用导致 1.66 次/轮）、<b>最后按当时价格分时段计价</b>（价格换了 10 次、缓存从 56% 涨到 88%）。任何一步偷懒，结果都会偏差 20%~100%。</p>
+  </section>
+
+  <hr>
+  <footer>
+    本文档由 WorkBuddy 基于本地导出包全量解析生成，所有统计均未上传。<br>
+    数据范围：2025-01 至 2026-11 · 1,415 会话 · 10,745 消息 · 5,440 轮对话 · 18,807 次工具调用。<br>
+    <b style="color:var(--sub)">重要提示</b>：本文计算的是「若用 API 跑同样内容」的等价成本，DeepSeek 网页端为免费/会员制，不按此计费。
+  </footer>
+
+</div>
+</body>
+</html>
