@@ -28,13 +28,16 @@
 
 正因如此，本仓库只发布这个工具本身——分析过程、中间数据与原始导出包均不在仓库内。
 
-## 使用
+## 在线使用
 
-1. 打开 <https://wanwushelie.github.io/deepseek-cost-analysis/>
-2. 点击「预览示例账单」先看效果，或拖入自己的导出 ZIP 开始计算
-3. 切换主题、查看明细、导出海报
+| 入口 | 地址 | 适用 |
+|---|---|---|
+| **国内（推荐）** | <https://dsmoneycalc-10k3l3uv.maozi.io/> | 国内直连，免备案、访问快 |
+| 海外 | <https://wanwushelie.github.io/deepseek-cost-analysis/> | GitHub Pages |
 
-也可以直接把 `index.html` 下载到本地双击打开，功能完全一致。
+两个入口是同一个工具的镜像，功能完全一致。也可以直接把 `index.html` 下载到本地双击打开，断网可用。
+
+打开后点击「预览示例账单」先看效果，或拖入自己的导出 ZIP 开始计算；随后切换主题、查看明细、导出海报。
 
 ## 口径说明
 
